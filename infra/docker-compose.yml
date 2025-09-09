@@ -1,18 +1,19 @@
-# infra/docker-compose.yml
 version: '3.8'
 
 services:
   agent_a:
     build:
-      context: ../agents/agentA_knowledge # Tells Docker to look for a Dockerfile here
+      context: ../agents/agentA_knowledge
       dockerfile: Dockerfile
     container_name: agent_a
     ports:
-      - "8001:8000" # Exposes the service on your computer's port 8001
+      - "8001:8000" # Access Agent A on http://localhost:8001
     volumes:
-      - ../agents/agentA_knowledge:/app # Mounts your code for live-reloading during development
+      - ../agents/agentA_knowledge:/app
     env_file:
-      - ../.env # Loads environment variables from a .env file
+      - ../.env
+    networks:
+      - whatsapp_net
 
   agent_b:
     build:
@@ -20,10 +21,45 @@ services:
       dockerfile: Dockerfile
     container_name: agent_b
     ports:
-      - "8002:8000"
+      - "8002:8000" # Access Agent B on http://localhost:8002
     volumes:
       - ../agents/agentB_dealflow:/app
     env_file:
       - ../.env
+    networks:
+      - whatsapp_net
 
-# We will add n8n and chroma services here in the next steps
+  n8n:
+    image: n8nio/n8n
+    container_name: n8n
+    ports:
+      - "5678:5678" # Access n8n UI on http://localhost:5678
+    volumes:
+      - n8n_data:/home/node/.n8n # Persists n8n workflows and credentials
+    environment:
+      - GENERIC_TIMEZONE=Asia/Kolkata # IMPORTANT: Set this to your timezone
+    env_file:
+      - ../.env
+    networks:
+      - whatsapp_net
+
+  chroma:
+    image: ghcr.io/chroma-core/chroma:0.4.24 # Using a specific stable version
+    container_name: chroma
+    ports:
+      - "8000:8000" # Access Chroma API on http://localhost:8000
+    volumes:
+      - chroma_data:/chroma/.chroma/ # Persists the vector database
+    command: "uvicorn chromadb.app:app --reload --workers 1 --host 0.0.0.0 --port 8000"
+    networks:
+      - whatsapp_net
+
+# Define the network for services to communicate
+networks:
+  whatsapp_net:
+    driver: bridge
+
+# Define the volumes for data persistence
+volumes:
+  n8n_data:
+  chroma_data:
