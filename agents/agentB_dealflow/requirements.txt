@@ -1,0 +1,6 @@
+# agents/agentB_dealflow/requirements.txt
+fastapi
+uvicorn[standard]
+langchain
+langgraph
+openai

@@ -1,0 +1,6 @@
+# agents/agentA_knowledge/requirements.txt
+fastapi
+uvicorn[standard]
+langchain
+langgraph
+openai  # Or your preferred embedding model library

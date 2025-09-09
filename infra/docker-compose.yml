@@ -1,0 +1,27 @@
+# infra/docker-compose.yml
+version: '3.8'
+
+services:
+  agent_a:
+    build:
+      context: ../agents/agentA_knowledge
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000" # Host port 8001 maps to container port 8000
+    volumes:
+      - ../agents/agentA_knowledge:/app # Mount code for live reloading
+    env_file:
+      - ../.env
+
+  agent_b:
+    build:
+      context: ../agents/agentB_dealflow
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8000" # Host port 8002 maps to container port 8000
+    volumes:
+      - ../agents/agentB_dealflow:/app
+    env_file:
+      - ../.env
+
+  # We will add n8n and chroma services here in the next steps
