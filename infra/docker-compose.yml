@@ -4,24 +4,26 @@ version: '3.8'
 services:
   agent_a:
     build:
-      context: ../agents/agentA_knowledge
+      context: ../agents/agentA_knowledge # Tells Docker to look for a Dockerfile here
       dockerfile: Dockerfile
+    container_name: agent_a
     ports:
-      - "8001:8000" # Host port 8001 maps to container port 8000
+      - "8001:8000" # Exposes the service on your computer's port 8001
     volumes:
-      - ../agents/agentA_knowledge:/app # Mount code for live reloading
+      - ../agents/agentA_knowledge:/app # Mounts your code for live-reloading during development
     env_file:
-      - ../.env
+      - ../.env # Loads environment variables from a .env file
 
   agent_b:
     build:
       context: ../agents/agentB_dealflow
       dockerfile: Dockerfile
+    container_name: agent_b
     ports:
-      - "8002:8000" # Host port 8002 maps to container port 8000
+      - "8002:8000"
     volumes:
       - ../agents/agentB_dealflow:/app
     env_file:
       - ../.env
 
-  # We will add n8n and chroma services here in the next steps
+# We will add n8n and chroma services here in the next steps
