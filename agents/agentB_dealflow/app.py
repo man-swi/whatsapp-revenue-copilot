@@ -1,14 +1,16 @@
-# agents/agentB_dealflow/app.py
-from fastapi import FastAPI
+from pydantic import BaseModel
 
-app = FastAPI(
-    title="Agent B: Dealflow Agent",
-    description="Manages lead capture, proposals, and deal status.",
-    version="1.0.0"
-)
+class NewLeadRequest(BaseModel):
+    raw: str
 
-@app.get("/")
-def read_root():
-    return {"message": "Agent B is running."}
+class NewLeadResponse(BaseModel):
+    name: str
+    company: str
+    intent: str
+    budget: int
+    # ... more fields as per contract
 
-# We will add POST endpoints like /newlead, /proposal-copy later
+@app.post("/agentB/newlead", response_model=NewLeadResponse)
+def newlead_endpoint(request: NewLeadRequest):
+    # TODO: Parse and return lead struct
+    return NewLeadResponse(name="John", company="Acme", intent="PoC", budget=10000)
