@@ -1,6 +1,18 @@
-# agents/agentB_dealflow/requirements.txt
+# Main web framework
 fastapi
 uvicorn[standard]
+pydantic
+
+# LangChain libraries for document processing, embeddings, and vector stores
 langchain
-langgraph
-google-generativeai
+langchain-community
+langchain-text-splitters
+langchain-huggingface  # For using open-source embedding models
+sentence-transformers # The actual library for the embedding model
+chromadb              # The client for our Chroma vector database
+
+# Google libraries to interact with Google Drive
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+python-dotenv         # To load environment variables like GOOGLE_CREDENTIALS_JSON
