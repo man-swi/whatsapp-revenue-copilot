@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: agent_a
     ports:
-      - "8001:8000" # Access Agent A on http://localhost:8001
+      - "8001:8000"
     volumes:
       - ../agents/agentA_knowledge:/app
     env_file:
@@ -21,7 +21,7 @@ services:
       dockerfile: Dockerfile
     container_name: agent_b
     ports:
-      - "8002:8000" # Access Agent B on http://localhost:8002
+      - "8002:8000"
     volumes:
       - ../agents/agentB_dealflow:/app
     env_file:
@@ -33,23 +33,23 @@ services:
     image: n8nio/n8n:latest
     container_name: n8n
     ports:
-      - "5678:5678" # Access n8n UI on http://localhost:5678
+      - "5678:5678"
     volumes:
-      - n8n_data:/home/node/.n8n # Persists n8n workflows and credentials
+      - n8n_data:/home/node/.n8n
     environment:
-      - GENERIC_TIMEZONE=Asia/Kolkata # IMPORTANT: Set this to your timezone
+      - GENERIC_TIMEZONE=Asia/Kolkata
     env_file:
       - ../.env
     networks:
       - whatsapp_net
 
   chroma:
-    image: ghcr.io/chroma-core/chroma:0.4.24 # Using a specific stable version
+    image: ghcr.io/chroma-core/chroma:0.4.24
     container_name: chroma
     ports:
-      - "8000:8000" # Access Chroma API on http://localhost:8000
+      - "8000:8000"
     volumes:
-      - chroma_data:/chroma/.chroma/ # Persists the vector database
+      - chroma_data:/chroma/.chroma/
     command: "uvicorn chromadb.app:app --reload --workers 1 --host 0.0.0.0 --port 8000"
     networks:
       - whatsapp_net
