@@ -2,8 +2,8 @@
 
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List
-import datetime # We need this for the new endpoint
+from typing import List, Optional
+import datetime
 
 # --- Pydantic Models ---
 
@@ -24,16 +24,25 @@ class ProposalResponse(BaseModel):
     summary: str
     bullet_points: List[str]
     
-# NEW: Models for the scheduling endpoint
 class NextStepRequest(BaseModel):
-    """Defines the input for a scheduling request."""
     text: str
 
 class NextStepResponse(BaseModel):
-    """Defines the output for a parsed time."""
     title: str
     start_iso: str
     end_iso: str
+    
+# NEW: Models for the status update endpoint
+class StatusClassifyRequest(BaseModel):
+    """Defines the input for a status update."""
+    label: str # "Won", "Lost", or "On hold"
+    reasonText: Optional[str] = None # The user's explanation is optional
+
+class StatusClassifyResponse(BaseModel):
+    """Defines the output for a classified status."""
+    label: str
+    reasonCategory: str
+    reasonSummary: str
 
 
 # --- FastAPI Application ---
@@ -71,20 +80,32 @@ def proposal_copy_endpoint(request: ProposalRequest):
         ]
     )
 
-# NEW: Endpoint for parsing scheduling text
 @app.post("/agentB/nextstep-parse", response_model=NextStepResponse)
 def nextstep_parse_endpoint(request: NextStepRequest):
-    """Parses scheduling text and returns placeholder ISO times."""
     print(f"Received scheduling text: {request.text}")
-    
-    # In a real agent, you would use an LLM to parse the text.
-    # For now, we'll return a fixed time.
     now = datetime.datetime.now(datetime.timezone.utc)
     start_time = now + datetime.timedelta(days=1)
     end_time = start_time + datetime.timedelta(hours=1)
-    
     return NextStepResponse(
         title=f"Follow-up call based on: '{request.text}'",
         start_iso=start_time.isoformat(),
         end_iso=end_time.isoformat()
+    )
+
+# NEW: Endpoint for classifying a status update
+@app.post("/agentB/status-classify", response_model=StatusClassifyResponse)
+def status_classify_endpoint(request: StatusClassifyRequest):
+    """Classifies a deal status update."""
+    print(f"Received status update: {request.label} | Reason: {request.reasonText}")
+    
+    # In a real agent, an LLM would categorize the reason.
+    # For now, we return a placeholder.
+    category = "Budget"
+    if "timeline" in (request.reasonText or ""):
+        category = "Timeline"
+        
+    return StatusClassifyResponse(
+        label=request.label,
+        reasonCategory=category,
+        reasonSummary=f"Placeholder summary for: {request.reasonText}"
     )
