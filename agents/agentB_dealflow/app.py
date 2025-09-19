@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI
 from pydantic import BaseModel
+from typing import List
 
 # --- Pydantic Models ---
 
@@ -20,6 +21,17 @@ class NewLeadResponse(BaseModel):
     company: str
     intent: str
     budget: int
+
+# NEW: Models for the proposal endpoint
+class ProposalRequest(BaseModel):
+    """Defines the input for a proposal request."""
+    lead_company: str
+
+class ProposalResponse(BaseModel):
+    """Defines the output for a generated proposal."""
+    title: str
+    summary: str
+    bullet_points: List[str]
 
 
 # --- FastAPI Application ---
@@ -51,4 +63,19 @@ def newlead_endpoint(request: NewLeadRequest):
         company="Acme Corp",
         intent="Proof of Concept",
         budget=10000
+    )
+
+# NEW: Endpoint for generating proposal copy
+@app.post("/agentB/proposal-copy", response_model=ProposalResponse)
+def proposal_copy_endpoint(request: ProposalRequest):
+    """Generates placeholder proposal text for a given company."""
+    print(f"Received proposal request for company: {request.lead_company}")
+    return ProposalResponse(
+        title=f"Proposal for {request.lead_company}",
+        summary=f"This document outlines a proof of concept for {request.lead_company} to demonstrate value.",
+        bullet_points=[
+            "Initial consultation and goal alignment.",
+            "Implementation of core features.",
+            "Review session and next steps."
+        ]
     )
