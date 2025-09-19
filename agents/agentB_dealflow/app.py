@@ -3,35 +3,37 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List
+import datetime # We need this for the new endpoint
 
 # --- Pydantic Models ---
 
 class NewLeadRequest(BaseModel):
-    """
-    Defines the structure for an incoming new lead.
-    For now, it just expects a raw text string.
-    """
     raw: str
 
 class NewLeadResponse(BaseModel):
-    """
-    Defines the structure of the data after the lead text has been processed.
-    """
     name: str
     company: str
     intent: str
     budget: int
 
-# NEW: Models for the proposal endpoint
 class ProposalRequest(BaseModel):
-    """Defines the input for a proposal request."""
     lead_company: str
 
 class ProposalResponse(BaseModel):
-    """Defines the output for a generated proposal."""
     title: str
     summary: str
     bullet_points: List[str]
+    
+# NEW: Models for the scheduling endpoint
+class NextStepRequest(BaseModel):
+    """Defines the input for a scheduling request."""
+    text: str
+
+class NextStepResponse(BaseModel):
+    """Defines the output for a parsed time."""
+    title: str
+    start_iso: str
+    end_iso: str
 
 
 # --- FastAPI Application ---
@@ -43,21 +45,12 @@ app = FastAPI(
 
 @app.get("/")
 def read_root():
-    """A simple endpoint to check if the agent is running."""
     return {"message": "Agent B is running."}
 
 
 @app.post("/agentB/newlead", response_model=NewLeadResponse)
 def newlead_endpoint(request: NewLeadRequest):
-    """
-    This endpoint will process incoming text from a potential lead.
-    """
-    # TODO: Implement your lead processing logic here.
-    # You will use an LLM or regex to extract details from 'request.raw'.
-    
-    print(f"Received raw lead text: {request.raw}") # Good for debugging!
-
-    # Return a sample response for now.
+    print(f"Received raw lead text: {request.raw}")
     return NewLeadResponse(
         name="John Doe",
         company="Acme Corp",
@@ -65,10 +58,8 @@ def newlead_endpoint(request: NewLeadRequest):
         budget=10000
     )
 
-# NEW: Endpoint for generating proposal copy
 @app.post("/agentB/proposal-copy", response_model=ProposalResponse)
 def proposal_copy_endpoint(request: ProposalRequest):
-    """Generates placeholder proposal text for a given company."""
     print(f"Received proposal request for company: {request.lead_company}")
     return ProposalResponse(
         title=f"Proposal for {request.lead_company}",
@@ -78,4 +69,22 @@ def proposal_copy_endpoint(request: ProposalRequest):
             "Implementation of core features.",
             "Review session and next steps."
         ]
+    )
+
+# NEW: Endpoint for parsing scheduling text
+@app.post("/agentB/nextstep-parse", response_model=NextStepResponse)
+def nextstep_parse_endpoint(request: NextStepRequest):
+    """Parses scheduling text and returns placeholder ISO times."""
+    print(f"Received scheduling text: {request.text}")
+    
+    # In a real agent, you would use an LLM to parse the text.
+    # For now, we'll return a fixed time.
+    now = datetime.datetime.now(datetime.timezone.utc)
+    start_time = now + datetime.timedelta(days=1)
+    end_time = start_time + datetime.timedelta(hours=1)
+    
+    return NextStepResponse(
+        title=f"Follow-up call based on: '{request.text}'",
+        start_iso=start_time.isoformat(),
+        end_iso=end_time.isoformat()
     )
