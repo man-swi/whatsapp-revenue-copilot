@@ -1,6 +1,7 @@
 # agents/agentB_dealflow/requirements.txt
 fastapi
 uvicorn[standard]
+pydantic
 langchain
 langgraph
 google-generativeai

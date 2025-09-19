@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List
 # Import the graph we just created
-from .graph import ingestion_graph, AgentState
+from graph import ingestion_graph, AgentState
 
 # --- Pydantic Models ---
 class AskRequest(BaseModel):
