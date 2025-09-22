@@ -3,22 +3,24 @@ fastapi
 uvicorn[standard]
 pydantic
 
-# LangChain libraries for document processing, embeddings, and vector stores
+# LangChain libraries
 langchain
 langchain-community
+langgraph
 langchain-text-splitters
-langchain-huggingface  # For using open-source embedding models
-sentence-transformers # The actual library for the embedding model
-chromadb              # The client for our Chroma vector database
+
+# For loading PDF documents
+pypdf
+
+# For creating vector embeddings with a local model
+langchain-huggingface
+sentence-transformers
+
+# For interacting with ChromaDB vector store
+langchain-chroma
 
 # Google libraries to interact with Google Drive
 google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
-python-dotenv         # To load environment variables like GOOGLE_CREDENTIALS_JSON
-
-# For loading PDF documents
-pypdf
-
-# For interacting with ChromaDB vector store
-langchain-chroma
+python-dotenv
