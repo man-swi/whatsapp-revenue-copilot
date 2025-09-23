@@ -1,7 +1,11 @@
+# agents/agentA_knowledge/graph.py
+
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langgraph.graph import StateGraph, END
 from typing import TypedDict, Annotated, List
 import operator
+import tempfile # <--- ADDED
+import os       # <--- ADDED
 
 # Import our new tools
 from tools import download_file_from_drive, get_chroma_client
@@ -22,35 +26,54 @@ class IngestionState(TypedDict):
 # --- Node Definitions ---
 # Each function is a "node" in our graph that performs a specific action.
 
+# vvv THIS IS THE UPDATED FUNCTION vvv
 def download_and_load(state: IngestionState) -> IngestionState:
     """
-    Node 1: Downloads the file from Google Drive and loads it into memory.
+    Node 1: Downloads the file from Google Drive, saves it temporarily, and loads it.
     """
     print("--- Entering Node: download_and_load ---")
     file_id = state['driveFileId']
+    documents = [] # Initialize documents list
     
     # Download the file using our tool
     file_buffer = download_file_from_drive(file_id)
     
     if file_buffer is None:
         print("Failed to download file.")
-        return {"doc_chunks": [], "num_chunks": 0} # Stop the process if download fails
-    
-    # For now, we only handle PDFs. We can add more loaders later.
-    if file_buffer.mimeType == 'application/pdf':
-        # Use PyPDFLoader to load the PDF content from the in-memory buffer
-        loader = PyPDFLoader(file_buffer)
-        documents = loader.load()
-        print(f"Successfully loaded {len(documents)} pages from PDF.")
-    else:
-        print(f"Unsupported file type: {file_buffer.mimeType}")
-        documents = []
+        return {"doc_chunks": [], "num_chunks": 0}
 
-    # We need to add source metadata to each document for later citation
+    # Use a temporary file to load the document from its path
+    # This is necessary because PyPDFLoader expects a file path, not an in-memory object
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+            temp_file.write(file_buffer.getvalue())
+            temp_file_path = temp_file.name
+        
+        print(f"File temporarily saved to: {temp_file_path}")
+
+        # Check the MIME type to decide how to load the document
+        if file_buffer.mimeType == 'application/pdf':
+            # Use PyPDFLoader to load the PDF content from the temporary file path
+            loader = PyPDFLoader(temp_file_path)
+            documents = loader.load()
+            print(f"Successfully loaded {len(documents)} pages from PDF.")
+        else:
+            print(f"Unsupported file type: {file_buffer.mimeType}")
+            documents = []
+
+    finally:
+        # Clean up the temporary file
+        if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+            print(f"Cleaned up temporary file: {temp_file_path}")
+
+    # Add source metadata to each document for later citation
     for doc in documents:
         doc.metadata["source"] = file_buffer.name
         
     return {"doc_chunks": documents}
+# ^^^ END OF UPDATED FUNCTION ^^^
+
 
 def chunk_documents(state: IngestionState) -> IngestionState:
     """

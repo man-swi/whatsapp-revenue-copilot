@@ -30,7 +30,7 @@ def download_file_from_drive(file_id: str) -> io.BytesIO:
         service = get_google_drive_service()
         
         # First, get the file's metadata to find out its name and MIME type
-        file_metadata = service.files().get(file_id=file_id, fields='name, mimeType').execute()
+        file_metadata = service.files().get(fileId=file_id, fields='name, mimeType').execute()
         print(f"--- Downloading file: {file_metadata.get('name')} ---")
 
         # Prepare the request to download the file content

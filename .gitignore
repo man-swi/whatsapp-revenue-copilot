@@ -2,6 +2,8 @@
 
 # Environment files
 .env
+service-account.json
+credentials.json
 
 # Python artifacts
 __pycache__/

@@ -1,3 +1,5 @@
+# agents/agentA_knowledge/requirements.txt
+
 # Main web framework
 fastapi
 uvicorn[standard]
@@ -17,7 +19,10 @@ langchain-huggingface
 sentence-transformers
 
 # For interacting with ChromaDB vector store
-langchain-chroma
+# vvv MODIFY/ADD THESE LINES vvv
+chromadb==0.4.24
+langchain-chroma==0.1.0
+# ^^^ MODIFY/ADD THESE LINES ^^^
 
 # Google libraries to interact with Google Drive
 google-api-python-client
