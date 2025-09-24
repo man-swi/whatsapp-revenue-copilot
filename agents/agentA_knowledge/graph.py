@@ -116,7 +116,7 @@ ingestion_graph = ingestion_workflow.compile()
 
 
 # ==============================================================================
-# === NEW: GRAPH AND NODES FOR QUESTION & ANSWERING (RAG) ======================
+# === Q&A GRAPH AND NODES (RAG) ================================================
 # ==============================================================================
 
 # --- Q&A State Definition ---
@@ -140,7 +140,9 @@ def retrieve_documents(state: QAState) -> QAState:
         collection_name="knowledge_base",
         embedding_function=embedding_model,
     )
-    retriever = vectorstore.as_retrisplitterever(search_kwargs={"k": 4})
+    # vvv THIS IS THE CORRECTED LINE vvv
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
+    # ^^^ THIS IS THE CORRECTED LINE ^^^
     retrieved_docs = retriever.invoke(question)
     context = "\n\n---\n\n".join([doc.page_content for doc in retrieved_docs])
     citations = list(set([doc.metadata.get('source', 'Unknown') for doc in retrieved_docs]))
