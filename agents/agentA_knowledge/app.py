@@ -1,14 +1,12 @@
+# agents/agentA_knowledge/app.py
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import List
-from graph import ingestiongraph, IngestionState, qagraph, QAState
+# Import ALL the graphs and state objects we created
+from graph import ingestion_graph, IngestionState, qa_graph, QAState
 
-app = FastAPI(
-    title="Agent A Knowledge Agent",
-    description="Manages knowledge base ingestion and QA.",
-    version="1.0.0"
-)
-
+# --- Pydantic Models ---
 class AskRequest(BaseModel):
     userId: str
     text: str
@@ -25,41 +23,61 @@ class IngestResponse(BaseModel):
     chunks: int
     status: str
 
+# --- FastAPI Application ---
+app = FastAPI(
+    title="Agent A: Knowledge Agent",
+    description="Manages knowledge base ingestion and Q&A.",
+    version="1.0.0"
+)
+
 @app.get("/")
-async def read_root():
+def read_root():
     return {"message": "Agent A is running."}
 
 @app.post("/agentA/ask", response_model=AskResponse)
-async def askendpoint(request: AskRequest):
-    print("--- Received question for /agentA/ask ---")
-    print("Question:", request.text)
+def ask_endpoint(request: AskRequest):
+    """Receives a question and uses the RAG graph to answer it."""
     try:
-        initialstate = {"question": request.text}
-        # Use asynchronous invocation
-        finalstate = await qagraph.ainvoke(initialstate, recursion_limit=10)
-        print("--- QA Graph execution finished ---")
-        answer = finalstate.get("answer", "I could not find an answer in the documents.")
-        citations = finalstate.get("citations", [])
+        print(f"--- Received question for /agentA/ask ---")
+        print(f"Question: {request.text}")
+
+        # Initial state for the QA graph
+        initial_state = {"question": request.text}
+        
+        # Invoke the QA graph
+        final_state = qa_graph.invoke(initial_state, {"recursion_limit": 10})
+
+        print(f"--- Q&A Graph execution finished ---")
+        
+        answer = final_state.get('answer', "I could not find an answer in the documents.")
+        citations = final_state.get('citations', [])
+
         return AskResponse(
             answer=answer,
             citations=citations,
-            confidence=0.9  # Placeholder
+            confidence=0.9 # Placeholder confidence for now
         )
     except Exception as e:
-        print("An error occurred in askendpoint:", e)
+        print(f"An error occurred in ask_endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/agentA/ingest", response_model=IngestResponse)
-async def ingestendpoint(request: IngestRequest):
-    print("--- Received request for /agentA/ingest ---")
+def ingest_endpoint(request: IngestRequest):
+    """Receives a file ID from n8n and triggers the ingestion graph."""
     try:
-        initialstate = {"driveFileId": request.driveFileId}
-        finalstate = await ingestiongraph.ainvoke(initialstate, recursion_limit=10)
-        print("--- Ingestion Graph execution finished ---")
+        print(f"--- Received request for /agentA/ingest ---")
+        
+        initial_state = {"driveFileId": request.driveFileId}
+        
+        final_state = ingestion_graph.invoke(initial_state, {"recursion_limit": 10})
+        
+        print(f"--- Ingestion Graph execution finished ---")
+        
         return IngestResponse(
-            chunks=finalstate.get("numchunks", 0),
-            status=f"SUCCESS Processing complete for file {request.driveFileId}"
+            chunks=final_state.get('num_chunks', 0),
+            status=f"SUCCESS: Processing complete for file {request.driveFileId}"
         )
+
     except Exception as e:
-        print("An error occurred in ingestendpoint:", e)
+        print(f"An error occurred in ingest_endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
