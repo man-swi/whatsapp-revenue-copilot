@@ -3,6 +3,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import List
+import traceback
 # Import ALL the graphs and state objects we created
 from graph import ingestion_graph, IngestionState, qa_graph, QAState
 
@@ -34,31 +35,26 @@ app = FastAPI(
 def read_root():
     return {"message": "Agent A is running."}
 
+# This is now an ASYNC function
 @app.post("/agentA/ask", response_model=AskResponse)
-def ask_endpoint(request: AskRequest):
-    """Receives a question and uses the RAG graph to answer it."""
+async def ask_endpoint(request: AskRequest):
+    """ ASYNC Endpoint: Receives a question and uses the RAG graph to answer it. """
     try:
         print(f"--- Received question for /agentA/ask ---")
         print(f"Question: {request.text}")
-
-        # Initial state for the QA graph
         initial_state = {"question": request.text}
         
-        # Invoke the QA graph
-        final_state = qa_graph.invoke(initial_state, {"recursion_limit": 10})
+        # Use the async 'ainvoke' method for the graph
+        final_state = await qa_graph.ainvoke(initial_state, {"recursion_limit": 10})
 
         print(f"--- Q&A Graph execution finished ---")
-        
         answer = final_state.get('answer', "I could not find an answer in the documents.")
         citations = final_state.get('citations', [])
 
-        return AskResponse(
-            answer=answer,
-            citations=citations,
-            confidence=0.9 # Placeholder confidence for now
-        )
+        return AskResponse(answer=answer, citations=citations, confidence=0.9)
     except Exception as e:
         print(f"An error occurred in ask_endpoint: {e}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/agentA/ingest", response_model=IngestResponse)
@@ -66,18 +62,13 @@ def ingest_endpoint(request: IngestRequest):
     """Receives a file ID from n8n and triggers the ingestion graph."""
     try:
         print(f"--- Received request for /agentA/ingest ---")
-        
         initial_state = {"driveFileId": request.driveFileId}
-        
         final_state = ingestion_graph.invoke(initial_state, {"recursion_limit": 10})
-        
         print(f"--- Ingestion Graph execution finished ---")
-        
         return IngestResponse(
             chunks=final_state.get('num_chunks', 0),
             status=f"SUCCESS: Processing complete for file {request.driveFileId}"
         )
-
     except Exception as e:
         print(f"An error occurred in ingest_endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
