@@ -1,8 +1,10 @@
+# agents/agentA_knowledge/app.py
+
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List
-# Import the graph and the NEW state object we created
-from graph import ingestion_graph, IngestionState # CHANGED THIS LINE
+# Import ALL the graphs and state objects we created
+from graph import ingestion_graph, IngestionState, qa_graph, QAState
 
 # --- Pydantic Models ---
 class AskRequest(BaseModel):
@@ -11,7 +13,7 @@ class AskRequest(BaseModel):
 
 class AskResponse(BaseModel):
     answer: str
-    citations: List[str]
+    citations: List[str] = Field(default_factory=list)
     confidence: float
 
 class IngestRequest(BaseModel):
@@ -34,12 +36,30 @@ def read_root():
 
 @app.post("/agentA/ask", response_model=AskResponse)
 def ask_endpoint(request: AskRequest):
-    print(f"Received question from userId: {request.userId}")
-    return AskResponse(
-        answer="This is a placeholder answer from Agent A.",
-        citations=["doc1.pdf"],
-        confidence=0.95
-    )
+    """Receives a question and uses the RAG graph to answer it."""
+    try:
+        print(f"--- Received question for /agentA/ask ---")
+        print(f"Question: {request.text}")
+
+        # Initial state for the QA graph
+        initial_state = {"question": request.text}
+        
+        # Invoke the QA graph
+        final_state = qa_graph.invoke(initial_state, {"recursion_limit": 10})
+
+        print(f"--- Q&A Graph execution finished ---")
+        
+        answer = final_state.get('answer', "I could not find an answer in the documents.")
+        citations = final_state.get('citations', [])
+
+        return AskResponse(
+            answer=answer,
+            citations=citations,
+            confidence=0.9 # Placeholder confidence for now
+        )
+    except Exception as e:
+        print(f"An error occurred in ask_endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/agentA/ingest", response_model=IngestResponse)
 def ingest_endpoint(request: IngestRequest):
@@ -47,21 +67,17 @@ def ingest_endpoint(request: IngestRequest):
     try:
         print(f"--- Received request for /agentA/ingest ---")
         
-        # Create the initial state for our graph, using the NEW state name
-        initial_state = {"driveFileId": request.driveFileId} # CHANGED THIS LINE
+        initial_state = {"driveFileId": request.driveFileId}
         
-        # Invoke the graph with the initial state
-        # The config is necessary for streaming logs in LangSmith, good practice
         final_state = ingestion_graph.invoke(initial_state, {"recursion_limit": 10})
         
-        print(f"--- Graph execution finished ---")
+        print(f"--- Ingestion Graph execution finished ---")
         
-        # Return a response based on the final state of the graph
         return IngestResponse(
-            chunks=final_state.get('num_chunks', 0), # CHANGED THIS LINE to safely get the value
+            chunks=final_state.get('num_chunks', 0),
             status=f"SUCCESS: Processing complete for file {request.driveFileId}"
         )
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"An error occurred in ingest_endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))

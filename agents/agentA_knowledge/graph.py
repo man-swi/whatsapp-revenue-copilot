@@ -2,10 +2,10 @@
 
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langgraph.graph import StateGraph, END
-from typing import TypedDict, Annotated, List
+from typing import TypedDict, List
 import operator
-import tempfile # <--- ADDED
-import os       # <--- ADDED
+import tempfile
+import os
 
 # Import our new tools
 from tools import download_file_from_drive, get_chroma_client
@@ -16,34 +16,27 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 
-# --- State Definition ---
-# This is the memory of our graph.
+# --- State Definition (Ingestion) ---
 class IngestionState(TypedDict):
     driveFileId: str
-    doc_chunks: List # This will hold the document chunks after splitting
+    doc_chunks: List
     num_chunks: int
 
-# --- Node Definitions ---
-# Each function is a "node" in our graph that performs a specific action.
-
-# vvv THIS IS THE UPDATED FUNCTION vvv
+# --- Node Definitions (Ingestion) ---
 def download_and_load(state: IngestionState) -> IngestionState:
     """
     Node 1: Downloads the file from Google Drive, saves it temporarily, and loads it.
     """
     print("--- Entering Node: download_and_load ---")
     file_id = state['driveFileId']
-    documents = [] # Initialize documents list
+    documents = []
     
-    # Download the file using our tool
     file_buffer = download_file_from_drive(file_id)
     
     if file_buffer is None:
         print("Failed to download file.")
         return {"doc_chunks": [], "num_chunks": 0}
 
-    # Use a temporary file to load the document from its path
-    # This is necessary because PyPDFLoader expects a file path, not an in-memory object
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
             temp_file.write(file_buffer.getvalue())
@@ -51,9 +44,7 @@ def download_and_load(state: IngestionState) -> IngestionState:
         
         print(f"File temporarily saved to: {temp_file_path}")
 
-        # Check the MIME type to decide how to load the document
         if file_buffer.mimeType == 'application/pdf':
-            # Use PyPDFLoader to load the PDF content from the temporary file path
             loader = PyPDFLoader(temp_file_path)
             documents = loader.load()
             print(f"Successfully loaded {len(documents)} pages from PDF.")
@@ -62,18 +53,14 @@ def download_and_load(state: IngestionState) -> IngestionState:
             documents = []
 
     finally:
-        # Clean up the temporary file
         if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
             print(f"Cleaned up temporary file: {temp_file_path}")
 
-    # Add source metadata to each document for later citation
     for doc in documents:
         doc.metadata["source"] = file_buffer.name
         
     return {"doc_chunks": documents}
-# ^^^ END OF UPDATED FUNCTION ^^^
-
 
 def chunk_documents(state: IngestionState) -> IngestionState:
     """
@@ -85,14 +72,9 @@ def chunk_documents(state: IngestionState) -> IngestionState:
     if not documents:
         return {"doc_chunks": [], "num_chunks": 0}
 
-    # Initialize a text splitter
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    
-    # Split the documents into chunks
     doc_chunks = text_splitter.split_documents(documents)
-    
     print(f"Split document into {len(doc_chunks)} chunks.")
-    
     return {"doc_chunks": doc_chunks, "num_chunks": len(doc_chunks)}
 
 def embed_and_store(state: IngestionState) -> IngestionState:
@@ -103,17 +85,10 @@ def embed_and_store(state: IngestionState) -> IngestionState:
     doc_chunks = state['doc_chunks']
     
     if not doc_chunks:
-        return state # Nothing to do
+        return state
 
-    # Initialize the embedding model. This will run locally inside the container.
-    # "all-MiniLM-L6-v2" is a small, fast, and effective model.
     embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-
-    # Initialize our ChromaDB client from tools.py
     chroma_client = get_chroma_client()
-    
-    # Create a Chroma vector store. This will add the new chunks to our persistent database.
-    # We give it a collection name to keep things organized.
     vectorstore = Chroma.from_documents(
         documents=doc_chunks,
         embedding=embedding_model,
@@ -121,25 +96,93 @@ def embed_and_store(state: IngestionState) -> IngestionState:
         collection_name="knowledge_base"
     )
     print(f"--- Successfully embedded and stored {len(doc_chunks)} chunks in ChromaDB. ---")
-    
     return state
 
-# --- Graph Definition ---
-# This is where we wire the nodes together into a pipeline.
-
-# 1. Initialize the StateGraph with our IngestionState memory structure.
+# --- Graph Definition (Ingestion) ---
 workflow = StateGraph(IngestionState)
-
-# 2. Add the nodes to the graph.
 workflow.add_node("download_and_load", download_and_load)
 workflow.add_node("chunk_documents", chunk_documents)
 workflow.add_node("embed_and_store", embed_and_store)
-
-# 3. Define the edges (the order of operations).
 workflow.set_entry_point("download_and_load")
 workflow.add_edge("download_and_load", "chunk_documents")
 workflow.add_edge("chunk_documents", "embed_and_store")
-workflow.add_edge("embed_and_store", END) # Mark the end of the graph
-
-# 4. Compile the graph into a runnable object.
+workflow.add_edge("embed_and_store", END)
 ingestion_graph = workflow.compile()
+
+
+# ==============================================================================
+# === NEW: GRAPH AND NODES FOR QUESTION & ANSWERING (RAG) ======================
+# ==============================================================================
+
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+# --- Q&A State Definition ---
+class QAState(TypedDict):
+    question: str
+    context: str
+    answer: str
+    citations: List[str]
+
+# --- Q&A Node Definitions ---
+def retrieve_documents(state: QAState) -> QAState:
+    """
+    Node 4: Retrieves relevant documents from ChromaDB based on the user's question.
+    """
+    print("--- Entering Node: retrieve_documents ---")
+    question = state['question']
+    embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    chroma_client = get_chroma_client()
+    vectorstore = Chroma(
+        client=chroma_client,
+        collection_name="knowledge_base",
+        embedding_function=embedding_model,
+    )
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
+    retrieved_docs = retriever.invoke(question)
+    context = "\n\n---\n\n".join([doc.page_content for doc in retrieved_docs])
+    citations = list(set([doc.metadata.get('source', 'Unknown') for doc in retrieved_docs]))
+    print(f"Retrieved {len(retrieved_docs)} documents for question.")
+    return {"context": context, "citations": citations}
+
+def generate_answer(state: QAState) -> QAState:
+    """
+    Node 5: Generates an answer using an LLM, based on the retrieved context.
+    """
+    print("--- Entering Node: generate_answer ---")
+    question = state['question']
+    context = state['context']
+    prompt_template = """
+    You are a helpful assistant. Answer the user's question based ONLY on the context provided.
+    If the answer is not in the context, say that you cannot find the information in the provided documents.
+    Be concise.
+
+    CONTEXT:
+    {context}
+
+    QUESTION:
+    {question}
+
+    ANSWER:
+    """
+    prompt = ChatPromptTemplate.from_template(prompt_template)
+    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0)
+    rag_chain = (
+        {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+    answer = rag_chain.invoke({"context": context, "question": question})
+    return {"answer": answer}
+
+# --- Q&A Graph Definition ---
+qa_workflow = StateGraph(QAState)
+qa_workflow.add_node("retrieve_documents", retrieve_documents)
+qa_workflow.add_node("generate_answer", generate_answer)
+qa_workflow.set_entry_point("retrieve_documents")
+qa_workflow.add_edge("retrieve_documents", "generate_answer")
+qa_workflow.add_edge("generate_answer", END)
+qa_graph = qa_workflow.compile()

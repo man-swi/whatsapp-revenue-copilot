@@ -4,6 +4,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import io
+import json # Import the json library
 
 # --- ChromaDB Tool ---
 def get_chroma_client():
@@ -14,12 +15,12 @@ def get_chroma_client():
 # --- Google Drive Tool ---
 def get_google_drive_service():
     """Initializes and returns a Google Drive API service object."""
-    # We get the credentials from the environment variable set in docker-compose.yml
-    creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
-    if not creds_json:
+    creds_json_str = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    if not creds_json_str:
         raise ValueError("GOOGLE_CREDENTIALS_JSON environment variable not set.")
     
-    creds_dict = eval(creds_json)
+    # Use json.loads() which is safer than eval()
+    creds_dict = json.loads(creds_json_str) 
     credentials = Credentials.from_service_account_info(creds_dict, scopes=['https://www.googleapis.com/auth/drive.readonly'])
     service = build('drive', 'v3', credentials=credentials)
     return service
@@ -29,14 +30,11 @@ def download_file_from_drive(file_id: str) -> io.BytesIO:
     try:
         service = get_google_drive_service()
         
-        # First, get the file's metadata to find out its name and MIME type
         file_metadata = service.files().get(fileId=file_id, fields='name, mimeType').execute()
         print(f"--- Downloading file: {file_metadata.get('name')} ---")
 
-        # Prepare the request to download the file content
         request = service.files().get_media(fileId=file_id)
         
-        # Use BytesIO to create an in-memory binary buffer
         file_buffer = io.BytesIO()
         downloader = MediaIoBaseDownload(file_buffer, request)
         
@@ -45,10 +43,8 @@ def download_file_from_drive(file_id: str) -> io.BytesIO:
             status, done = downloader.next_chunk()
             print(f"Download progress: {int(status.progress() * 100)}%.")
         
-        # Reset the buffer's position to the beginning before returning
         file_buffer.seek(0)
         
-        # We also need to attach the metadata to the buffer object so our next function can use it
         file_buffer.name = file_metadata.get('name')
         file_buffer.mimeType = file_metadata.get('mimeType')
 
