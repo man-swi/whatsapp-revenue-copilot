@@ -81,7 +81,7 @@ ingestion_graph = workflow.compile()
 
 
 # ==============================================================================
-# === ASYNC RAG GRAPH (THIS IS THE FIX) ========================================
+# === ASYNC RAG GRAPH ==========================================================
 # ==============================================================================
 
 # --- Q&A State Definition ---
@@ -93,30 +93,30 @@ class QAState(TypedDict):
 
 # --- ASYNC Q&A Node Definitions ---
 async def retrieve_documents(state: QAState) -> QAState:
-    """ ASYNC Node: Retrieves documents from ChromaDB. """
     print("--- Entering ASYNC Node: retrieve_documents ---")
     question = state['question']
     embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     chroma_client = get_chroma_client()
     vectorstore = Chroma(client=chroma_client, collection_name="knowledge_base", embedding_function=embedding_model)
     retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
-    # Use the async 'ainvoke' method
     retrieved_docs = await retriever.ainvoke(question)
     context = "\n\n---\n\n".join([doc.page_content for doc in retrieved_docs])
     citations = list(set([doc.metadata.get('source', 'Unknown') for doc in retrieved_docs]))
-    print(f"Retrieved {len(retrieved_docs)} documents for question.")
     return {"context": context, "citations": citations}
 
 async def generate_answer(state: QAState) -> QAState:
-    """ ASYNC Node: Generates an answer using an LLM. """
     print("--- Entering ASYNC Node: generate_answer ---")
     question = state['question']
     context = state['context']
     prompt_template = "Answer the user's question based ONLY on the context provided:\n\nCONTEXT:\n{context}\n\nQUESTION:\n{question}"
     prompt = ChatPromptTemplate.from_template(prompt_template)
-    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0)
+    
+    # vvv THIS IS THE ONLY CHANGE IN THIS ENTIRE FILE vvv
+    # Using the more stable "gemini-1.0-pro" model
+    llm = ChatGoogleGenerativeAI(model="gemini-1.0-pro", temperature=0, convert_system_message_to_human=True)
+    # ^^^ END OF CHANGE ^^^
+
     rag_chain = {"context": RunnablePassthrough(), "question": RunnablePassthrough()} | prompt | llm | StrOutputParser()
-    # Use the async 'ainvoke' method
     answer = await rag_chain.ainvoke({"context": context, "question": question})
     return {"answer": answer}
 
