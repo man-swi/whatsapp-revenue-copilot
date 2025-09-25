@@ -34,9 +34,8 @@ app = FastAPI(
 def read_root():
     return {"message": "Agent A is running."}
 
-# vvv THIS IS THE CORRECTED FUNCTION vvv
 @app.post("/agentA/ask", response_model=AskResponse)
-async def ask_endpoint(request: AskRequest): # Added 'async'
+def ask_endpoint(request: AskRequest): # REMOVED async
     """Receives a question and uses the RAG graph to answer it."""
     try:
         print(f"--- Received question for /agentA/ask ---")
@@ -45,8 +44,8 @@ async def ask_endpoint(request: AskRequest): # Added 'async'
         # Initial state for the QA graph
         initial_state = {"question": request.text}
         
-        # Invoke the QA graph asynchronously
-        final_state = await qa_graph.ainvoke(initial_state, {"recursion_limit": 10}) # Added 'await' and changed to 'ainvoke'
+        # Invoke the QA graph synchronously
+        final_state = qa_graph.invoke(initial_state, {"recursion_limit": 10}) # REMOVED await, changed back to invoke
 
         print(f"--- Q&A Graph execution finished ---")
         
@@ -60,11 +59,9 @@ async def ask_endpoint(request: AskRequest): # Added 'async'
         )
     except Exception as e:
         print(f"An error occurred in ask_endpoint: {e}")
-        # This provides more detail in the log if an error occurs
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-# ^^^ END OF CORRECTED FUNCTION ^^^
 
 
 @app.post("/agentA/ingest", response_model=IngestResponse)
