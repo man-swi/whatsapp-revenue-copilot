@@ -3,10 +3,8 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import List
-# Import ALL the graphs and state objects we created
 from graph import ingestion_graph, IngestionState, qa_graph
 
-# --- Pydantic Models ---
 class AskRequest(BaseModel):
     userId: str
     text: str
@@ -23,7 +21,6 @@ class IngestResponse(BaseModel):
     chunks: int
     status: str
 
-# --- FastAPI Application ---
 app = FastAPI(
     title="Agent A: Knowledge Agent",
     description="Manages knowledge base ingestion and Q&A.",
@@ -35,17 +32,16 @@ def read_root():
     return {"message": "Agent A is running."}
 
 @app.post("/agentA/ask", response_model=AskResponse)
-def ask_endpoint(request: AskRequest): # REMOVED async
+async def ask_endpoint(request: AskRequest):  # CHANGED: Made async
     """Receives a question and uses the RAG graph to answer it."""
     try:
         print(f"--- Received question for /agentA/ask ---")
         print(f"Question: {request.text}")
 
-        # Initial state for the QA graph
         initial_state = {"question": request.text}
         
-        # Invoke the QA graph synchronously
-        final_state = qa_graph.invoke(initial_state, {"recursion_limit": 10}) # REMOVED await, changed back to invoke
+        # CHANGED: Use ainvoke (async invoke)
+        final_state = await qa_graph.ainvoke(initial_state, {"recursion_limit": 10})
 
         print(f"--- Q&A Graph execution finished ---")
         
@@ -55,7 +51,7 @@ def ask_endpoint(request: AskRequest): # REMOVED async
         return AskResponse(
             answer=answer,
             citations=citations,
-            confidence=0.9 # Placeholder confidence for now
+            confidence=0.9
         )
     except Exception as e:
         print(f"An error occurred in ask_endpoint: {e}")

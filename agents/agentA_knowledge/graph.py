@@ -5,10 +5,8 @@ from typing import TypedDict, List
 import tempfile
 import os
 
-# Import our new tools
 from tools import download_file_from_drive, get_chroma_client
 
-# Import LangChain components
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -24,7 +22,6 @@ class IngestionState(TypedDict):
     num_chunks: int
 
 # --- Node Definitions (Ingestion) ---
-# ... [The ingestion nodes are synchronous and correct, so they remain unchanged] ...
 def download_and_load(state: IngestionState) -> IngestionState:
     print("--- Entering Node: download_and_load ---")
     file_id = state['driveFileId']
@@ -92,7 +89,7 @@ ingestion_graph = ingestion_workflow.compile()
 
 
 # ==============================================================================
-# === Q&A GRAPH (RAG) - NOW FULLY SYNCHRONOUS =================================
+# === Q&A GRAPH (RAG) - NOW ASYNC =============================================
 # ==============================================================================
 
 class QAState(TypedDict):
@@ -112,23 +109,32 @@ def retrieve_documents(state: QAState) -> QAState:
         embedding_function=embedding_model,
     )
     retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
-    retrieved_docs = retriever.invoke(question) # Using synchronous invoke
+    retrieved_docs = retriever.invoke(question)
+    
+    if not retrieved_docs:
+        print("WARNING: No documents retrieved from ChromaDB!")
+        return {"context": "", "citations": []}
+    
     context = "\n\n---\n\n".join([doc.page_content for doc in retrieved_docs])
     citations = list(set([doc.metadata.get('source', 'Unknown') for doc in retrieved_docs]))
     print(f"Retrieved {len(retrieved_docs)} documents for question.")
     return {"context": context, "citations": citations}
 
-def generate_answer(state: QAState) -> QAState:
+async def generate_answer(state: QAState) -> QAState:  # CHANGED: Made async
     print("--- Entering Node: generate_answer ---")
     question = state['question']
     context = state['context']
+    
     if not context:
         return {"answer": "I could not find any relevant information in the documents to answer your question."}
+    
     prompt_template = "Answer the user's question based ONLY on the context provided.\n\nCONTEXT:\n{context}\n\nQUESTION:\n{question}\n\nANSWER:"
     prompt = ChatPromptTemplate.from_template(prompt_template)
     llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0)
     rag_chain = prompt | llm | StrOutputParser()
-    answer = rag_chain.invoke({"context": context, "question": question}) # Using synchronous invoke
+    
+    # CHANGED: Use ainvoke (async invoke)
+    answer = await rag_chain.ainvoke({"context": context, "question": question})
     return {"answer": answer}
 
 # --- Q&A Graph Definition ---
