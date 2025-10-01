@@ -89,7 +89,7 @@ ingestion_graph = ingestion_workflow.compile()
 
 
 # ==============================================================================
-# === Q&A GRAPH (RAG) - NOW ASYNC =============================================
+# === Q&A GRAPH (RAG) ==========================================================
 # ==============================================================================
 
 class QAState(TypedDict):
@@ -101,26 +101,44 @@ class QAState(TypedDict):
 def retrieve_documents(state: QAState) -> QAState:
     print("--- Entering Node: retrieve_documents ---")
     question = state['question']
+    
     embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     chroma_client = get_chroma_client()
+    
+    # Get the existing collection
+    try:
+        collection = chroma_client.get_collection(name="knowledge_base")
+        print(f"Found collection with {collection.count()} documents")
+    except Exception as e:
+        print(f"Error getting collection: {e}")
+        return {"context": "", "citations": []}
+    
+    # Create vectorstore from existing collection
     vectorstore = Chroma(
         client=chroma_client,
         collection_name="knowledge_base",
         embedding_function=embedding_model,
     )
+    
+    # Search for relevant documents
     retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
     retrieved_docs = retriever.invoke(question)
+    
+    print(f"Query: '{question}'")
+    print(f"Retrieved {len(retrieved_docs)} documents")
     
     if not retrieved_docs:
         print("WARNING: No documents retrieved from ChromaDB!")
         return {"context": "", "citations": []}
     
+    # Build context and citations
     context = "\n\n---\n\n".join([doc.page_content for doc in retrieved_docs])
     citations = list(set([doc.metadata.get('source', 'Unknown') for doc in retrieved_docs]))
-    print(f"Retrieved {len(retrieved_docs)} documents for question.")
+    
+    print(f"Citations: {citations}")
     return {"context": context, "citations": citations}
 
-async def generate_answer(state: QAState) -> QAState:  # CHANGED: Made async
+async def generate_answer(state: QAState) -> QAState:
     print("--- Entering Node: generate_answer ---")
     question = state['question']
     context = state['context']
@@ -130,10 +148,11 @@ async def generate_answer(state: QAState) -> QAState:  # CHANGED: Made async
     
     prompt_template = "Answer the user's question based ONLY on the context provided.\n\nCONTEXT:\n{context}\n\nQUESTION:\n{question}\n\nANSWER:"
     prompt = ChatPromptTemplate.from_template(prompt_template)
-    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0)
+    
+    # FIXED MODEL NAME
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
     rag_chain = prompt | llm | StrOutputParser()
     
-    # CHANGED: Use ainvoke (async invoke)
     answer = await rag_chain.ainvoke({"context": context, "question": question})
     return {"answer": answer}
 
