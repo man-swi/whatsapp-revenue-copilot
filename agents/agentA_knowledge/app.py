@@ -1,5 +1,4 @@
 # agents/agentA_knowledge/app.py
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import List
